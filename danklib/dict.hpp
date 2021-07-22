@@ -4,6 +4,8 @@
 
 const uint32_t empty_bucket = 267349487;
 
+template<typename T>
+struct dict_iter;
 
 template<typename T>
 struct bucket {
@@ -30,8 +32,6 @@ struct dict {
     bucket<T> *items;
     int backing_size;
     int amount;
-
-    int iter_pos = 0;
 
     const static int default_backing_size = 10;
     constexpr static float high_water_mark = 0.5;
@@ -66,8 +66,6 @@ struct dict {
     // ah am i doing forbidden things with amount?
     // since i call set, we will see
     void rebuild() {
-        printf("rebuild\n");
-
         const auto old_size = backing_size;
         backing_size *= 2;
         const auto old_items = items;
@@ -118,23 +116,8 @@ struct dict {
         }
     }
 
-    void iter_begin() {
-        iter_pos = 0;
-    }
-
-    bucket<T> *iter_next() {
-        if (iter_pos >= backing_size - 1) {
-            return NULL;
-        }
-
-        while (items[iter_pos].key == empty_bucket) {
-            if (iter_pos >= backing_size - 1) {
-                return NULL;
-            }
-            iter_pos++; // ordering matters
-        }
-        iter_pos++;
-        return &items[iter_pos-1];
+    dict_iter<T> iter() {
+        return (dict_iter<T>) {.target_dict = this, .pos = 0};
     }
 
     void debug_print(void (*repr)(T item)) {
@@ -148,6 +131,27 @@ struct dict {
             printf("\t%d: %u -- ", i, items[i].key);
             repr(items[i].item);
             printf("\n");
+        }
+    }
+};
+
+
+template<typename T>
+struct dict_iter {
+    dict<T> *target_dict;
+    int pos = 0;
+
+    T *next() {
+        while (true) {
+            if (pos >= target_dict->backing_size) {
+                return NULL;
+            }
+            if (target_dict->items[pos].key == empty_bucket) {
+                pos++;
+            } else {
+                pos++;
+                return &target_dict->items[pos-1].item;
+            }
         }
     }
 };

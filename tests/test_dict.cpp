@@ -29,9 +29,9 @@ int main(int argc, char** argv) {
             }
         }
 
-        d.iter_begin();
-        while (auto x = d.iter_next()) {
-            printf("%d\n", x->item);
+        auto it = d.iter();
+        while (auto x = it.next()) {
+            printf("%d\n", *x);
         }
     }
 
@@ -47,9 +47,10 @@ int main(int argc, char** argv) {
         d.set(600, 6);
         d.debug_print(dict_repr);
 
-        d.iter_begin();
-        while (auto x = d.iter_next()) {
-            printf("%d\n", x->item);
+        auto it = d.iter();
+        while (auto x = it.next()) {
+            printf("%d\n", *x);
         }
+
     }
 }

@@ -34,9 +34,9 @@ void print_aabb(AABBComponent item) {
 bool world::handle_event(SDL_Event e) {
     if (e.type == SDL_KEYDOWN) {
         if (e.key.keysym.sym == SDLK_SPACE) {
-            comp_controller.iter_begin();
-            while (auto controller = comp_controller.iter_next()) {
-                auto motion = comp_motion.get(controller->key);
+            auto it = comp_controller.iter();
+            while (auto controller = it.next()) {
+                auto motion = comp_motion.get(controller->id);
                 if (motion->grounded) {
                     motion->vy = jump_velocity;
                     motion->grounded = false;
@@ -64,12 +64,10 @@ void world::draw(render_context *rc) {
     rc->draw_line(platform_colour2, vec2(0, platform_line2), vec2(1, platform_line2), 2);
     rc->draw_line(platform_colour3, vec2(0, platform_line3), vec2(1, platform_line3), 2);
 
-
-    // iter aabb
-    comp_aabb.iter_begin();
-    while (auto aabb = comp_aabb.iter_next()) {
-        const auto colour = comp_base.get(aabb->key)->colour;
-        rc->draw_rect(colour, aabb->item.x - cam_x, aabb->item.y, aabb->item.w, aabb->item.h);
+    auto it = comp_aabb.iter();
+    while (auto aabb = it.next()) {
+        const auto colour = comp_base.get(aabb->id)->colour;
+        rc->draw_rect(colour, aabb->x - cam_x, aabb->y, aabb->w, aabb->h);
     }
 }
 
@@ -145,18 +143,18 @@ void world::aabb_slide(uint32_t id, float dx, float dy) {
 
     const auto epsilon = 0.0005;
 
-    comp_aabb.iter_begin();
-    while (auto other_aabb = comp_aabb.iter_next()) {
-        if (&other_aabb->item == this_aabb) continue;
+    auto aabb_it = comp_aabb.iter();
+    while (auto other_aabb = aabb_it.next()) {
+        if (other_aabb == this_aabb) continue;
 
-        if (aabb_overlap(wanted_aabb, other_aabb->item)) {
+        if (aabb_overlap(wanted_aabb, *other_aabb)) {
             //printf("overlap %f %f %f %f and %f %f %f %f\n", wanted_aabb.x, wanted_aabb.y, wanted_aabb.w, wanted_aabb.h, other_aabb->item.x, other_aabb->item.y, other_aabb->item.w, other_aabb->item.h);
-            const auto collision_normal = aabb_direction(current_aabb, wanted_aabb, other_aabb->item);
+            const auto collision_normal = aabb_direction(current_aabb, wanted_aabb, *other_aabb);
             //printf("collision normal %f %f\n", collision_normal.x, collision_normal.y);
-            if (collision_normal.x == -1) max_x = other_aabb->item.x - this_aabb->w;
-            if (collision_normal.x == 1) min_x = other_aabb->item.x + other_aabb->item.w;
+            if (collision_normal.x == -1) max_x = other_aabb->x - this_aabb->w;
+            if (collision_normal.x == 1) min_x = other_aabb->x + other_aabb->w;
             if (collision_normal.y == -1) {
-                max_y = other_aabb->item.y - this_aabb->h;
+                max_y = other_aabb->y - this_aabb->h;
 
                 if (auto motion = comp_motion.get(id)) {
                     motion->grounded = true;
@@ -164,7 +162,7 @@ void world::aabb_slide(uint32_t id, float dx, float dy) {
                 }
             }
             if (collision_normal.y == 1) {
-                min_y = other_aabb->item.y + other_aabb->item.h;
+                min_y = other_aabb->y + other_aabb->h;
 
                 if (auto motion = comp_motion.get(id)) {
                     motion->vy = 0;
@@ -201,21 +199,25 @@ void world::aabb_slide(uint32_t id, float dx, float dy) {
 
 void world::update(float dt, float a) {
     auto keystates = SDL_GetKeyboardState(NULL);
-    comp_controller.iter_begin();
-    while (auto controller = comp_controller.iter_next()) {
-        auto motion = comp_motion.get(controller->key);
-        motion->vx = keystates[SDL_SCANCODE_A] ? -movement_speed:
-                    keystates[SDL_SCANCODE_D] ? movement_speed:
-                    0.0;
+    
+    {
+        auto it = comp_controller.iter();
+        while (auto controller = it.next()) {
+            auto motion = comp_motion.get(controller->id);
+            motion->vx = keystates[SDL_SCANCODE_A] ? -movement_speed:
+                        keystates[SDL_SCANCODE_D] ? movement_speed:
+                        0.0;
+        }
     }
 
-    comp_motion.iter_begin();
-    while (auto motion = comp_motion.iter_next()) {
-        // apply gravity
-        motion->item.vy += gravity * dt;
-        // slide its aabb
-        aabb_slide(motion->key, motion->item.vx * dt, motion->item.vy * dt);
-
+    {
+        auto it = comp_motion.iter();
+        while (auto motion = it.next()) {
+            // apply gravity
+            motion->vy += gravity * dt;
+            // slide its aabb
+            aabb_slide(motion->id, motion->vx * dt, motion->vy * dt);
+        }
     }
 
     cam_x += dt * cam_speed;
@@ -279,8 +281,6 @@ world::world(uint32_t seed, float a) {
     make_wall(a + cam_x, 0, wall_w, next_height2);
     make_wall(a + cam_x, -100, wall_w, 100);
     make_wall(a + cam_x, wall_gap_size + next_height2, wall_w, 1);
-
-    comp_aabb.debug_print(print_aabb);
 
     // make player
     rng = hash(rng);

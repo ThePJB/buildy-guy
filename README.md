@@ -1,11 +1,10 @@
 Lesson
 ----
-SOLVED - one of the missing entity problems, was from not updating the rng and so overwriting it lol
+SOLVED - one of the missing entity problems, was from not updating the rng and so overwriting it lol. careful with that
 
 
 Bug
 ----
-Sometimes entities dont show up still
 Still the odd bad case aabb collision
 
 
@@ -20,3 +19,5 @@ coyote time
 noob friendly -
     show destination platform spot
     'tutorial' section - camera doesnt start moving and you have to make a few platforms
+jump buffering
+maybe just you are bouncy
