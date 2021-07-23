@@ -3,7 +3,7 @@
 #define min(A,B) ((A) < (B) ? (A) : (B))
 #define max(A,B) ((A) > (B) ? (A) : (B))
 
-const auto cam_speed = 0.35;
+const auto cam_speed = 0.5;
 const auto cam_start_offset = -0.7;
 const auto gravity = 3.5;
 const auto jump_velocity = -1.5;
@@ -14,8 +14,13 @@ const auto platform_line2 = 0.5;
 const auto platform_line3 = 0.8;
 
 const auto platform_height = 0.05;
+const auto platform_width = 0.1;
 
-const auto platform_offset = vec2(0.4, 0.1);
+const auto indicator_height = 0.025;
+const auto indicator_width = 0.025;
+
+//const auto platform_offset = vec2(0.4, 0.1);
+const float platform_offset[3] = {0.4, 0.5, 0.6};
 
 const auto sky_colour = rgb(0.8, 0.8, 1.0);
 const auto platform_colour1 = rgb(1,0,0);
@@ -26,6 +31,8 @@ const auto player_colour = rgb(1,1,1);
 
 const auto wall_gap_size = 0.3;
 const auto wall_w = 0.2;
+
+const auto max_z = 4;
 
 void print_aabb(AABBComponent item) {
     printf("%f %f %f %f", item.x, item.y, item.w, item.h);
@@ -64,11 +71,34 @@ void world::draw(render_context *rc) {
     rc->draw_line(platform_colour2, vec2(0, platform_line2), vec2(1, platform_line2), 2);
     rc->draw_line(platform_colour3, vec2(0, platform_line3), vec2(1, platform_line3), 2);
 
-    auto it = comp_aabb.iter();
-    while (auto aabb = it.next()) {
-        const auto colour = comp_base.get(aabb->id)->colour;
-        rc->draw_rect(colour, aabb->x - cam_x, aabb->y, aabb->w, aabb->h);
+    for (int i = 0; i < max_z; i++) {
+        auto it = comp_aabb.iter();
+        while (auto aabb = it.next()) {
+            const auto base = comp_base.get(aabb->id);
+            if (i != base->z) continue;
+            rc->draw_rect(base->colour, aabb->x - cam_x, aabb->y, aabb->w, aabb->h);
+        }
     }
+
+    const auto player_x = comp_aabb.get(player_id)->x;
+
+    rc->draw_rect(platform_colour1, 
+        player_x + platform_offset[2] + platform_width/2 - indicator_width/2 - cam_x,
+        platform_line1 - indicator_height/2,
+        indicator_width, indicator_height
+    );
+
+    rc->draw_rect(platform_colour2, 
+        player_x + platform_offset[1] + platform_width/2 - indicator_width/2 - cam_x,
+        platform_line2 - indicator_height/2,
+        indicator_width, indicator_height
+    );
+
+    rc->draw_rect(platform_colour3, 
+        player_x + platform_offset[0] + platform_width/2 - indicator_width/2 - cam_x,
+        platform_line3 - indicator_height/2,
+        indicator_width, indicator_height
+    );
 }
 
 bool aabb_overlap(AABBComponent a, AABBComponent b) {
@@ -240,16 +270,16 @@ void world::player_build_platform(uint32_t player_id, int which_platform) {
 
     auto x = 0.0f;
     auto y = 0.0f;
-    x = player_aabb->x + platform_offset.x + which_platform * platform_offset.y;
+    x = player_aabb->x + platform_offset[which_platform];
     if (which_platform == 0) {
         y = platform_line3 -platform_height/2;
-        make_platform(x, y, 0.1, platform_height, platform_colour3);
+        make_platform(x, y, platform_width, platform_height, platform_colour3);
     } else if (which_platform == 1) {
         y = platform_line2 -platform_height/2;
-        make_platform(x, y, 0.1, platform_height, platform_colour2);
+        make_platform(x, y, platform_width, platform_height, platform_colour2);
     } else if (which_platform == 2) {
         y = platform_line1 -platform_height/2;
-        make_platform(x, y, 0.1, platform_height, platform_colour1);
+        make_platform(x, y, platform_width, platform_height, platform_colour1);
     }
 }
 
@@ -257,13 +287,13 @@ void world::player_build_platform(uint32_t player_id, int which_platform) {
 void world::make_platform(float x, float y, float w, float h, rgb colour) {
     rng = hash(rng);
     comp_aabb.set(rng, (AABBComponent){.id = rng, .x = x, .y = y, .w = w, .h = h});
-    comp_base.set(rng, (EntityBaseComponent){.id = rng, .type = ET_PLATFORM, .colour = colour});
+    comp_base.set(rng, (EntityBaseComponent){.id = rng, .type = ET_PLATFORM, .colour = colour, .z = 1});
 }
 
 void world::make_wall(float x, float y, float w, float h) {
     rng = hash(rng);
     comp_aabb.set(rng, (AABBComponent){.id = rng, .x = x, .y = y, .w = w, .h = h});
-    comp_base.set(rng, (EntityBaseComponent){.id = rng, .type = ET_WALL, .colour = wall_colour});
+    comp_base.set(rng, (EntityBaseComponent){.id = rng, .type = ET_WALL, .colour = wall_colour, .z = 0});
     num_walls++;
 }
 
@@ -288,6 +318,6 @@ world::world(uint32_t seed, float a) {
     comp_aabb.set(rng, (AABBComponent){.id = rng, .x = a/2 + cam_x + wall_w/2, .y = next_height + wall_gap_size - 0.05, .w = 0.05, .h = 0.05});
     comp_motion.set(rng, (MotionComponent){.id = rng, .vx = 0, .vy = 0});
     comp_controller.set(rng, (ControllerComponent){.id = rng});
-    comp_base.set(rng, (EntityBaseComponent){.id = rng, .type = ET_PLAYER, .colour = player_colour});
+    comp_base.set(rng, (EntityBaseComponent){.id = rng, .type = ET_PLAYER, .colour = player_colour, .z = 2});
 
 }

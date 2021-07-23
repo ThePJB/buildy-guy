@@ -179,5 +179,4 @@ struct vla {
         }
         return dest_vla;
     }
-
 };

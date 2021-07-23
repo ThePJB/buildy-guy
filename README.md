@@ -21,3 +21,9 @@ noob friendly -
     'tutorial' section - camera doesnt start moving and you have to make a few platforms
 jump buffering
 maybe just you are bouncy
+
+
+Other movement mechanics
+----
+VVVVVV / terraria gravity potion
+you bounce

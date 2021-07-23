@@ -36,6 +36,7 @@ struct EntityBaseComponent {
     uint32_t id;
     EntityType type;
     rgb colour;
+    int z;
 };
 
 struct world {
