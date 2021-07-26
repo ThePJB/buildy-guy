@@ -1,9 +1,6 @@
 #include "world.hpp"
 
-#define min(A,B) ((A) < (B) ? (A) : (B))
-#define max(A,B) ((A) > (B) ? (A) : (B))
-
-const auto cam_speed = 0.5;
+const auto cam_speed = 0.4;
 const auto cam_start_offset = -0.7;
 const auto gravity = 3.5;
 const auto jump_velocity = -1.5;
@@ -16,7 +13,7 @@ const auto platform_line3 = 0.8;
 const auto platform_height = 0.05;
 const auto platform_width = 0.1;
 
-const auto indicator_height = 0.025;
+const auto indicator_height = 0.0125;
 const auto indicator_width = 0.025;
 
 //const auto platform_offset = vec2(0.4, 0.1);
@@ -30,7 +27,9 @@ const auto wall_colour = rgb(0.7, 0.7, 0.7);
 const auto player_colour = rgb(1,1,1);
 
 const auto wall_gap_size = 0.3;
-const auto wall_w = 0.2;
+const auto wall_w = 0.1;
+
+const auto wall_bounds = vec2(0.05, 0.6);
 
 const auto max_z = 4;
 
@@ -38,30 +37,26 @@ void print_aabb(AABBComponent item) {
     printf("%f %f %f %f", item.x, item.y, item.w, item.h);
 }
 
-bool world::handle_event(SDL_Event e) {
-    if (e.type == SDL_KEYDOWN) {
-        if (e.key.keysym.sym == SDLK_SPACE) {
-            auto it = comp_controller.iter();
-            while (auto controller = it.next()) {
-                auto motion = comp_motion.get(controller->id);
-                if (motion->grounded) {
-                    motion->vy = jump_velocity;
-                    motion->grounded = false;
-                }
-            }
-            return true;
-        } else if (e.key.keysym.sym == SDLK_j) {
-            player_build_platform(player_id, 0);
-            return true;
-        } else if (e.key.keysym.sym == SDLK_k) {
-            player_build_platform(player_id, 1);
-            return true;
-        } else if (e.key.keysym.sym == SDLK_l) {
-            player_build_platform(player_id, 2);
-            return true;
-        }
+bool world::handle_event(SDL_Event e, double time) {
+    if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_SPACE) {
+        auto motion = comp_motion.get(player_id);
+        controller.space_pressed(time, motion);
+
+    } else if (e.type == SDL_KEYUP && e.key.keysym.sym == SDLK_SPACE) {
+        auto motion = comp_motion.get(player_id);
+        controller.space_released(time, motion);
+
+    } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_j) {
+        player_build_platform(player_id, 0);
+    } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_k) {
+        player_build_platform(player_id, 1);
+    } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_l) {
+        player_build_platform(player_id, 2);
+
+    } else {
+        return false;
     }
-    return false;
+    return true;
 }
 
 void world::draw(render_context *rc) {
@@ -101,154 +96,28 @@ void world::draw(render_context *rc) {
     );
 }
 
-bool aabb_overlap(AABBComponent a, AABBComponent b) {
-    // might need epsilon
-    // overlap IFF x overlap and Y overlap
-    return ((a.x < b.x && a.x + a.w > b.x) || (b.x < a.x && b.x + b.w > a.x)) &&// x overlap
-        ((a.y < b.y && a.y + a.h > b.y) || (b.y < a.y && b.y + b.h > a.y));      // y overlap
-}
+// returns whether to keep going
+bool world::update(double dt, double time, float a) {
+    this->time = time;
+    collisions.length = 0;
 
-// return the collision direction
-// basically if x overlap is more, in what direction
+    const auto player_motion = comp_motion.get(player_id);
 
-// must be returning wrong collision normal in the we are below case
-// not detecting a below conllision
-vec2 aabb_direction(AABBComponent old_pos, AABBComponent candidate_pos, AABBComponent other) {
-    const auto old_left = old_pos.x;
-    const auto old_right = old_pos.x + old_pos.w;
-    const auto old_top = old_pos.y;
-    const auto old_bot = old_pos.y + old_pos.h;
-
-    const auto candidate_left = candidate_pos.x;
-    const auto candidate_right = candidate_pos.x + candidate_pos.w;
-    const auto candidate_top = candidate_pos.y;
-    const auto candidate_bot = candidate_pos.y + candidate_pos.h;
-
-    const auto other_left = other.x;
-    const auto other_right = other.x + other.w;
-    const auto other_top = other.y;
-    const auto other_bot = other.y + other.h;
-
-    // was not colliding, is now colliding
-    if (old_right < other_left && candidate_right >= other_left) {
-        return vec2(-1, 0); // we are to left
-    }
-    if (old_bot < other_top && candidate_bot >= other_top) {    // this could be eating it, or one of the other ifs could be
-        return vec2(0, -1); // we are above
-    }
-    if (old_left > other_right && candidate_left <= other_right) {
-        return vec2(1, 0); // we are to right
-    }
-    if (old_top > other_bot && candidate_top <= other_bot) {    // this branch might not be happening
-        return vec2(0, 1); // we are below // this looks correct to me fuk
-    }
-
-
-    printf("bad aabb thing\n");
-    //exit(1);
-
-    return vec2(0,-1); // umm we are now in the realm of floating point weirdness
-    // stops you falling through the floor at least
-}
-
-void world::aabb_slide(uint32_t id, float dx, float dy) {
-    // how does this work
-    // check if they would overlap
-    // if yes figure out compromise position AND appropriately kill velocity, or maybe bool touching
-        // determine which side collision occurred
-            // one which has least overlap
-                // eg up has least overlap, therefore align bottom to top and clamp vy
-            // bonus points: include velocity (prob not necessary though)
-    auto this_aabb = comp_aabb.get(id);
-    
-    auto current_aabb = *this_aabb;
-    auto wanted_aabb = *this_aabb;
-    wanted_aabb.x += dx;
-    wanted_aabb.y += dy;
-
-    float max_x = INFINITY;
-    float min_x = -INFINITY;
-    float max_y = INFINITY;
-    float min_y = -INFINITY;
-
-    const auto epsilon = 0.0005;
-
-    auto aabb_it = comp_aabb.iter();
-    while (auto other_aabb = aabb_it.next()) {
-        if (other_aabb == this_aabb) continue;
-
-        if (aabb_overlap(wanted_aabb, *other_aabb)) {
-            //printf("overlap %f %f %f %f and %f %f %f %f\n", wanted_aabb.x, wanted_aabb.y, wanted_aabb.w, wanted_aabb.h, other_aabb->item.x, other_aabb->item.y, other_aabb->item.w, other_aabb->item.h);
-            const auto collision_normal = aabb_direction(current_aabb, wanted_aabb, *other_aabb);
-            //printf("collision normal %f %f\n", collision_normal.x, collision_normal.y);
-            if (collision_normal.x == -1) max_x = other_aabb->x - this_aabb->w;
-            if (collision_normal.x == 1) min_x = other_aabb->x + other_aabb->w;
-            if (collision_normal.y == -1) {
-                max_y = other_aabb->y - this_aabb->h;
-
-                if (auto motion = comp_motion.get(id)) {
-                    motion->grounded = true;
-                    motion->vy = 0;
-                }
-            }
-            if (collision_normal.y == 1) {
-                min_y = other_aabb->y + other_aabb->h;
-
-                if (auto motion = comp_motion.get(id)) {
-                    motion->vy = 0;
-                }
-            }
-
-        }
-    }
-
-    //printf("max y %f\n", max_y);
-
-    if (dx > 0) {
-        this_aabb->x = min(wanted_aabb.x, max_x - epsilon);
-    }
-    if (dx < 0) {
-        this_aabb->x = max(wanted_aabb.x, min_x + epsilon);
-    }
-
-    if (dy > 0) {   // we are going down
-        const auto old_y = this_aabb->y;
-        this_aabb->y = min(wanted_aabb.y, max_y - epsilon);
-        auto motion = comp_motion.get(id);
-        if (motion && this_aabb->y - old_y > epsilon) {
-            motion->grounded = false;
-        }
-        
-    }
-    if (dy < 0) {
-        this_aabb->y = max(wanted_aabb.y, min_y + epsilon); // and then this case
-    }
-    //printf("aabb set to %f %f %f %f\n", this_aabb->x, this_aabb->y, this_aabb->w, this_aabb->h);
-
-}
-
-void world::update(float dt, float a) {
     auto keystates = SDL_GetKeyboardState(NULL);
-    
-    {
-        auto it = comp_controller.iter();
-        while (auto controller = it.next()) {
-            auto motion = comp_motion.get(controller->id);
-            motion->vx = keystates[SDL_SCANCODE_A] ? -movement_speed:
-                        keystates[SDL_SCANCODE_D] ? movement_speed:
-                        0.0;
-        }
+
+    auto it = comp_motion.iter();
+    while (auto motion = it.next()) {
+        // apply gravity
+        motion->vy += gravity * dt;
+        // slide its aabb
+        slide_entity(motion->id, motion->vx * dt, motion->vy * dt);
     }
 
-    {
-        auto it = comp_motion.iter();
-        while (auto motion = it.next()) {
-            // apply gravity
-            motion->vy += gravity * dt;
-            // slide its aabb
-            aabb_slide(motion->id, motion->vx * dt, motion->vy * dt);
-        }
-    }
+    controller.check_collisions(&collisions, player_motion, time);
+
+    player_motion->vx = keystates[SDL_SCANCODE_A] ? -movement_speed:
+                keystates[SDL_SCANCODE_D] ? movement_speed:
+                0.0;
 
     cam_x += dt * cam_speed;
 
@@ -263,6 +132,15 @@ void world::update(float dt, float a) {
         make_wall(a + cam_x, wall_gap_size + next_height, wall_w, 1);
     }
 
+    // check collisions
+    for (auto col = collisions.begin(); col < collisions.end(); col++) {
+        if (col->e1 != player_id) continue;
+        if (comp_base.get(col->e2)->type == ET_WALL) {
+            printf("you died\n");
+            return false;
+        }
+    }
+    return true;
 }
 
 void world::player_build_platform(uint32_t player_id, int which_platform) {
@@ -302,10 +180,6 @@ world::world(uint32_t seed, float a) {
 
     cam_x = cam_start_offset;
 
-    const auto next_height = hash_floatn(hash(rng + num_walls), 0, 1 - wall_gap_size - 0.05); // so you can see it
-    make_wall(a/2 + cam_x, 0, wall_w, next_height);
-    make_wall(a/2 + cam_x, -100, wall_w, 100);
-    make_wall(a/2 + cam_x, wall_gap_size + next_height, wall_w, 1);
 
     const auto next_height2 = hash_floatn(hash(rng + num_walls), 0, 1 - wall_gap_size - 0.05); // so you can see it
     make_wall(a + cam_x, 0, wall_w, next_height2);
@@ -315,9 +189,13 @@ world::world(uint32_t seed, float a) {
     // make player
     rng = hash(rng);
     player_id = rng;
-    comp_aabb.set(rng, (AABBComponent){.id = rng, .x = a/2 + cam_x + wall_w/2, .y = next_height + wall_gap_size - 0.05, .w = 0.05, .h = 0.05});
+    comp_aabb.set(rng, (AABBComponent){.id = rng, .x = a/2 + cam_x + platform_width/2, .y = platform_line2 - 0.1, .w = 0.05, .h = 0.05});
     comp_motion.set(rng, (MotionComponent){.id = rng, .vx = 0, .vy = 0});
-    comp_controller.set(rng, (ControllerComponent){.id = rng});
+    controller = (PlatformerController) {
+        .id = rng,
+    };
     comp_base.set(rng, (EntityBaseComponent){.id = rng, .type = ET_PLAYER, .colour = player_colour, .z = 2});
+
+    make_platform(a/2 + cam_x, platform_line2 - platform_height/2, platform_width, platform_height, platform_colour2);
 
 }

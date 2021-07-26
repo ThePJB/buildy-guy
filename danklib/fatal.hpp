@@ -20,11 +20,11 @@
 // point of pcinfo?
 
 
-void err_cb(void *data, const char *msg, int errnum) {
+static void err_cb(void *data, const char *msg, int errnum) {
     printf("err %d %s\n", errnum, msg);
 }
 
-void syminfo_cb(void *data, uintptr_t pc,
+static void syminfo_cb(void *data, uintptr_t pc,
         const char *symname,
         uintptr_t symval,
         uintptr_t symsize) {
@@ -32,7 +32,7 @@ void syminfo_cb(void *data, uintptr_t pc,
     printf("syminfo cb name %s size %lu val %lu\n", symname, symsize, symval);
 }
 
-int full_cb(void *data, uintptr_t pc,
+static int full_cb(void *data, uintptr_t pc,
     	const char *filename, int lineno,
 	    const char *function) {
     if (filename == NULL) {

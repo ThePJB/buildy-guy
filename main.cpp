@@ -44,9 +44,10 @@ int main(int argc, char** argv) {
     auto keep_going = true;
     while (keep_going) {
         const auto start_tick = SDL_GetPerformanceCounter();
+        double time = (double)start_tick / tick_freq;
         SDL_Event e;
         while (SDL_PollEvent(&e) != 0) {
-            if (w.handle_event(e)) continue;
+            if (w.handle_event(e, time)) continue;
             if (e.type == SDL_QUIT) {
                 keep_going = false;
                 fflush(stdout);
@@ -55,12 +56,16 @@ int main(int argc, char** argv) {
                 const auto sym = e.key.keysym.sym;
                 if (sym == SDLK_r) {
                     w.destroy();
-                    w = world(current_time(), rc.a);
+                    w = world(start_tick, rc.a);
                 }
             }
         }
 
-        w.update(dt, rc.a);
+        
+        if (!w.update(dt, time, rc.a)) {
+            w.destroy();
+            w = world(start_tick, rc.a);
+        }
 
         // draw
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
